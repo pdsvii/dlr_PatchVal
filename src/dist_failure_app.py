@@ -144,7 +144,8 @@ def _empty_seed_row() -> Dict[str, str]:
         'Patching Status 2': '',
         'Observed Platform': '',
         'Observed Version': '',
-        'Boot Statement': '',
+            'Boot Statement': '',
+            'Switch in Stack': '',
         'ICMP Ping Status': '',
         'Image Present': '',
         'Needs Upgrade': '',
@@ -256,7 +257,8 @@ def _report_rows(rows: List[Dict[str, str]]) -> List[Dict[str, str]]:
                 'Observed Version': row.get('Observed Version', ''),
                 'Boot Statement': row.get('Boot Statement', ''),
                 'ICMP Ping Status': row.get('ICMP Ping Status', row.get('Ping Status', '')),
-                'Image Present': row.get('Image Present', ''),
+                    'Image Present': row.get('Image Present', ''),
+                    'Switch in Stack': row.get('Switch in Stack', row.get('Switch Count', '')),
                 'Needs Upgrade': row.get('Needs Upgrade', ''),
                 'Target Image': row.get('Target Image', ''),
                 'Target Version': row.get('Target Version', ''),
@@ -468,6 +470,7 @@ def _observed_summary_frame(rows: List[Dict[str, str]]) -> pd.DataFrame:
                 'Device Name': row.get('Device Name', ''),
                 'Device IP': row.get('Device IP', ''),
                 'ICMP Ping Status': row.get('ICMP Ping Status', row.get('Ping Status', '')),
+                'Switch in Stack': row.get('Switch in Stack', row.get('Switch Count', '')),
                 'Observed Platform': row.get('Observed Platform', ''),
                 'Boot Statement': row.get('Boot Statement', ''),
             }
@@ -623,6 +626,7 @@ def render_app() -> None:
     rows = _apply_target_recommendations(rows, golden_images, selected_profile, use_automatic_image_selection)
     for row in rows:
         row['ICMP Ping Status'] = str(row.get('ICMP Ping Status') or row.get('Ping Status') or '').strip()
+        row['Switch in Stack'] = str(row.get('Switch in Stack') or row.get('Switch Count') or '').strip()
     total = len(rows)
     observed = sum(1 for row in rows if row.get('Observed Version'))
     needs_upgrade = sum(1 for row in rows if row.get('Needs Upgrade') == 'Yes')
