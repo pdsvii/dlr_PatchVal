@@ -278,6 +278,20 @@ def _run_postchecks(conn, platform_text: str, flash_targets: List[str], logs: Li
     }
 
 
+def _classify_ssh_login_error(exc: Exception) -> tuple[str, str]:
+    message = str(exc).strip()
+    lowered = message.lower()
+    if any(token in lowered for token in ('authentication failed', 'auth failed', 'invalid password', 'permission denied')):
+        return 'Authentication failed', message or 'SSH authentication failed'
+    if any(token in lowered for token in ('timed out', 'timeout', 'no existing session')):
+        return 'Connection timeout', message or 'SSH connection timed out'
+    if any(token in lowered for token in ('refused', 'unable to connect', 'unreachable', 'no route to host')):
+        return 'Connection refused/unreachable', message or 'SSH connection could not be established'
+    if any(token in lowered for token in ('error reading ssh protocol banner', 'ssh protocol banner')):
+        return 'SSH banner/protocol error', message or 'SSH protocol/banner negotiation failed'
+    return 'Unknown SSH login error', message or 'Unknown SSH login error'
+
+
 def _run_single_row(
     row: Dict[str, str],
     profile: Dict[str, str],
@@ -289,9 +303,12 @@ def _run_single_row(
     logs: List[str] = []
     ip = (row.get('Device IP') or '').strip()
     imported_platform = (row.get('Platform') or '').strip()
+    result['SSH Login Status'] = 'Not attempted'
+    result['SSH Error Category'] = ''
 
     if not ip:
         result['Ping Status'] = 'Missing IP'
+        result['SSH Login Status'] = 'Skipped'
         result['Workflow Status'] = 'Skipped'
         result['Workflow Notes'] = 'No device IP provided'
         return result
@@ -300,13 +317,25 @@ def _run_single_row(
     result['Ping Status'] = 'Online' if is_online else 'Offline'
     result['Ping Output'] = ping_output
     if not is_online:
+        result['SSH Login Status'] = 'Skipped'
         result['Workflow Status'] = 'Skipped'
         result['Workflow Notes'] = 'Device did not respond to ping'
         return result
 
     conn = None
     try:
-        conn = open_ssh_connection(ip)
+        try:
+            conn = open_ssh_connection(ip)
+            result['SSH Login Status'] = 'Success'
+        except Exception as exc:
+            category, detail = _classify_ssh_login_error(exc)
+            result['SSH Login Status'] = 'Failed'
+            result['SSH Error Category'] = category
+            result['Workflow Status'] = 'SSH login failed'
+            result['Workflow Notes'] = detail
+            result['Workflow Log'] = '\n'.join(logs)
+            return result
+
         show_version_output = conn.send_command('show version', read_timeout=60)
         details = parse_show_version_details(show_version_output)
         result['Observed Platform'] = details['platform_id']
@@ -414,6 +443,10 @@ def _run_single_row(
         return result
 
     except Exception as exc:
+        if result.get('SSH Login Status') == 'Not attempted':
+            category, _ = _classify_ssh_login_error(exc)
+            result['SSH Login Status'] = 'Failed'
+            result['SSH Error Category'] = category
         result['Workflow Status'] = 'Error'
         result['Workflow Notes'] = str(exc)
         result['Workflow Log'] = '\n'.join(logs)
@@ -445,6 +478,8 @@ def _display_rows(rows: List[Dict[str, str]]) -> List[Dict[str, str]]:
                 'Patching Status': row.get('Patching Status', ''),
                 'Patching Status 2': row.get('Patching Status 2', ''),
                 'Ping Status': row.get('Ping Status', ''),
+                'SSH Login Status': row.get('SSH Login Status', ''),
+                'SSH Error Category': row.get('SSH Error Category', ''),
                 'Switch Count': row.get('Switch Count', ''),
                 'Image Present': row.get('Image Present', ''),
                 'Needs Upgrade': row.get('Needs Upgrade', ''),
