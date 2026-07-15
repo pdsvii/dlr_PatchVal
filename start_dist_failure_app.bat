@@ -2,6 +2,8 @@
 setlocal
 
 set "ROOT_DIR=%~dp0"
+set "GIT_CMD=%LocalAppData%\Programs\Git\cmd"
+if exist "%GIT_CMD%\git.exe" set "PATH=%GIT_CMD%;%PATH%"
 if not exist "%ROOT_DIR%\.venv\Scripts\python.exe" (
   python -m venv "%ROOT_DIR%\.venv"
 )
