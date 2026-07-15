@@ -165,11 +165,6 @@ def _version_matches(current_version: str, target_version: str) -> bool:
     return bool(current and target and current == target)
 
 
-def _is_2960_platform(platform_text: str) -> bool:
-    text = (platform_text or '').upper()
-    return '2960' in text
-
-
 def _flash_targets(member_ids: List[int]) -> List[str]:
     members = sorted({int(member) for member in member_ids if int(member) > 0})
     if len(members) <= 1:
@@ -317,7 +312,7 @@ def _run_single_row(
     profile: Dict[str, str],
     execute_actions: bool,
     cleanup_old_images: bool = False,
-    execute_reload: bool = True,
+    execute_reload: bool = False,
 ) -> Dict[str, str]:
     result = dict(row)
     logs: List[str] = []
@@ -373,6 +368,7 @@ def _run_single_row(
         result['Post Check Output'] = ''
         result['Platform Match'] = 'Yes' if _platform_matches(imported_platform, details['platform_id'], profile['platform_prefix']) else 'No'
         result['Version Match'] = 'Yes' if _version_matches(details['software_version'], profile['target_version']) else 'No'
+        is_2960_platform = '2960' in f"{details['platform_id']} {imported_platform}".upper()
 
         try:
             switch_output = conn.send_command('show switch', read_timeout=60)
@@ -444,41 +440,37 @@ def _run_single_row(
                 boot_target = _boot_target_from_dir_output(flash_targets[0], target_dirs.get(flash_targets[0], ''), profile)
                 result['Boot Target'] = boot_target
 
-        # Per policy, only 2960 platforms get boot statement updates.
-        target_platform = details['platform_id'] or imported_platform
-        boot_command = f'boot system switch all flash:/{profile["image_name"]}z'
-        result['Boot Command'] = boot_command
+        boot_command = f'boot system switch all flash:/{profile["image_name"]}'
+        result['BootCommand'] = boot_command
+        result['Boot Command'] = boot_command if is_2960_platform else ''
 
         if execute_actions:
-            if _is_2960_platform(target_platform):
+            if is_2960_platform:
                 conn.send_config_set([boot_command])
-            else:
-                logs.append('boot statement update skipped: non-2960 platform')
-            if cleanup_old_images:
-                result['Clean Up Status'] = _cleanup_old_images(conn, flash_targets, profile, logs)
+                if cleanup_old_images:
+                    result['Clean Up Status'] = _cleanup_old_images(conn, flash_targets, profile, logs)
+                else:
+                    result['Clean Up Status'] = 'Skipped'
+                conn.send_command_timing('end', strip_prompt=False, strip_command=False)
+                try:
+                    write_output = run_timed_command(conn, 'wr', prompt_responses=[''])
+                    logs.append(f'wr: {write_output[-1200:]}')
+                except Exception as exc:
+                    logs.append(f'wr error: {exc}')
+                result['Boot Validation Status'] = _validate_boot_statement(conn, boot_command, logs)
+                try:
+                    verified_boot_output = conn.send_command('show boot', read_timeout=60)
+                    result['Boot Statement'] = _extract_boot_statement(verified_boot_output) or result.get('Boot Statement', '')
+                except Exception:
+                    pass
+                result['Workflow Status'] = 'Staged without reload'
+                result['Workflow Notes'] = '2960 boot statement updated and saved. No reload sent.'
             else:
                 result['Clean Up Status'] = 'Skipped'
-            conn.send_command_timing('end', strip_prompt=False, strip_command=False)
-            try:
-                write_output = run_timed_command(conn, 'wr', prompt_responses=[''])
-                logs.append(f'wr: {write_output[-1200:]}')
-            except Exception as exc:
-                logs.append(f'wr error: {exc}')
-            if _is_2960_platform(target_platform):
-                result['Boot Validation Status'] = _validate_boot_statement(conn, boot_command, logs)
-            else:
-                result['Boot Validation Status'] = 'Skipped (non-2960 platform)'
-            try:
-                verified_boot_output = conn.send_command('show boot', read_timeout=60)
-                result['Boot Statement'] = _extract_boot_statement(verified_boot_output) or result.get('Boot Statement', '')
-            except Exception:
-                pass
+                result['Boot Validation Status'] = 'Skipped for non-2960 platform'
+                result['Workflow Status'] = 'Staged without reload'
+                result['Workflow Notes'] = 'Boot statement update skipped (non-2960 platform). No reload sent.'
             result.update(_run_postchecks(conn, details['platform_id'] or imported_platform, flash_targets, logs))
-            result['Workflow Status'] = 'Staged without reload'
-            if _is_2960_platform(target_platform):
-                result['Workflow Notes'] = 'Image checked/downloaded, 2960 boot statement saved and validated, reload intentionally skipped by policy'
-            else:
-                result['Workflow Notes'] = 'Image checked/downloaded; boot statement updates are disabled for non-2960 platforms, reload skipped by policy'
         else:
             result['Workflow Status'] = 'Ready to execute'
             result['Workflow Notes'] = 'Review target image and boot statement, then enable execution'
@@ -572,11 +564,10 @@ def run_manual_reload_workflow(
     *,
     execute_actions: bool = False,
     cleanup_old_images: bool = False,
-    execute_reload: bool = True,
+    execute_reload: bool = False,
     profile: Dict[str, str] | None = None,
 ) -> List[Dict[str, str]]:
     active_profile = profile or _profile()
-    # Reloads are globally disabled by policy.
     return [_run_single_row(row, active_profile, execute_actions, cleanup_old_images, False) for row in rows]
 
 
@@ -591,7 +582,7 @@ def render_manual_reloads_panel() -> None:
 
     with manual_tab:
         st.subheader('Manual Reloads')
-        st.caption('Import a CSV or XLS file, analyze device reachability and image state, then stage actions before an optional reload.')
+        st.caption('Import a CSV or XLS file, analyze device reachability and image state, then stage actions with no reloads.')
         st.caption(f'Target: platform {profile["platform_prefix"]}, image {profile["image_name"]}, version {profile["target_version"]}')
 
         template_bytes = pd.DataFrame(_template_rows()).to_csv(index=False).encode('utf-8')
@@ -601,7 +592,7 @@ def render_manual_reloads_panel() -> None:
         analyze_clicked = st.button('Analyze Import', use_container_width=True)
         execute_actions = st.checkbox('Execute copy, boot statement, and write memory steps', value=False, key='manual_reload_execute')
         cleanup_old_images = st.checkbox('Clean up old images during staging', value=False, key='manual_reload_cleanup')
-        execute_clicked = st.button('Run Staging Workflow (No Reload)', use_container_width=True)
+        execute_clicked = st.button('Run Staging Workflow', use_container_width=True)
 
         if 'manual_reload_rows' not in st.session_state:
             st.session_state['manual_reload_rows'] = []
