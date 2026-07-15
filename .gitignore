@@ -4,6 +4,7 @@ __pycache__/
 .venv/
 .streamlit/secrets.toml
 data/*.db
+data/ui_fullpage.png
 reports/*.json
 demo_note.tmp
 .vscode/
