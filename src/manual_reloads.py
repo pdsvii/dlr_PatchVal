@@ -226,14 +226,22 @@ def _cleanup_old_images(conn, flash_targets: List[str], profile: Dict[str, str],
     return 'Completed' if deleted_any else 'No old images found'
 
 
-def _ensure_target_image_on_stack(conn, device_name: str, flash_targets: List[str], profile: Dict[str, str], logs: List[str]) -> tuple[Dict[str, str], bool]:
+def _ensure_target_image_on_stack(
+    conn,
+    device_name: str,
+    flash_targets: List[str],
+    profile: Dict[str, str],
+    logs: List[str],
+) -> tuple[Dict[str, str], bool, List[str]]:
     target_dirs: Dict[str, str] = {}
+    progress: List[str] = []
 
     # First ensure the target image exists on the base flash so we can fan it out.
     base_root = 'flash:/'
     base_dir_output = conn.send_command(f'dir {base_root}', read_timeout=60)
     target_dirs[base_root] = base_dir_output
     base_has_image = _has_image(base_dir_output, profile)
+    progress.append(f'{base_root}: {'present' if base_has_image else 'download required'}')
     if not base_has_image:
         logs.append(f'{device_name} {base_root}: target image missing; downloading {profile["image_name"]}')
         copy_output = run_timed_command(conn, f'copy {profile["image_url"]} flash:/', prompt_responses=['', ''])
@@ -247,18 +255,21 @@ def _ensure_target_image_on_stack(conn, device_name: str, flash_targets: List[st
         target_dirs[flash_root] = dir_output
         if _has_image(dir_output, profile):
             logs.append(f'{device_name} {flash_root}: target image present')
+            progress.append(f'{flash_root}: present')
             continue
         logs.append(f'{device_name} {flash_root}: copying target image from flash:/')
+        progress.append(f'{flash_root}: copying')
         copy_output = run_timed_command(
             conn,
             f'copy flash:/{profile["image_name"]} {flash_root}',
             prompt_responses=['', ''],
         )
         logs.append(f'{device_name} {flash_root}: copy complete {copy_output[-2500:]}')
+        progress.append(f'{flash_root}: copied')
         target_dirs[flash_root] = conn.send_command(f'dir {flash_root}', read_timeout=60)
 
     all_targets_have_image = all(_has_image(target_dirs.get(flash_root, ''), profile) for flash_root in flash_targets)
-    return target_dirs, all_targets_have_image
+    return target_dirs, all_targets_have_image, progress
 
 
 def _validate_boot_statement(conn, boot_command: str, logs: List[str]) -> str:
@@ -398,6 +409,7 @@ def _run_single_row(
         result['Observed Platform'] = details['platform_id']
         result['Observed Version'] = details['software_version']
         result['Boot Statement'] = _extract_boot_statement(show_boot_output)
+        result['Stack Download Progress'] = ''
         result['Post Check Status'] = ''
         result['Post Check Commands'] = ''
         result['Post Check Output'] = ''
@@ -446,11 +458,25 @@ def _run_single_row(
             return result
 
         if execute_actions and not all_targets_have_image:
-            target_dirs, all_targets_have_image = _ensure_target_image_on_stack(conn, row.get('Device Name', ip), flash_targets, profile, logs)
+            target_dirs, all_targets_have_image, stack_progress = _ensure_target_image_on_stack(
+                conn,
+                row.get('Device Name', ip),
+                flash_targets,
+                profile,
+                logs,
+            )
+            result['Stack Download Progress'] = ' | '.join(stack_progress)
             result['Image Present'] = 'Yes' if all_targets_have_image else 'No'
             if not boot_target:
                 boot_target = _boot_target_from_dir_output(flash_targets[0], target_dirs.get(flash_targets[0], ''), profile)
                 result['Boot Target'] = boot_target
+        elif not result.get('Stack Download Progress'):
+            result['Stack Download Progress'] = ' | '.join(
+                [
+                    f'{flash_root}: present' if _has_image(target_dirs.get(flash_root, ''), profile) else f'{flash_root}: missing'
+                    for flash_root in flash_targets
+                ]
+            )
 
         boot_command = f'boot system switch all flash:/{profile["image_name"]}'
         result['BootCommand'] = boot_command

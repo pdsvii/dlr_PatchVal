@@ -144,8 +144,9 @@ def _empty_seed_row() -> Dict[str, str]:
         'Patching Status 2': '',
         'Observed Platform': '',
         'Observed Version': '',
-            'Boot Statement': '',
-            'Switch in Stack': '',
+        'Boot Statement': '',
+        'Switch in Stack': '',
+        'Stack Download Progress': '',
         'ICMP Ping Status': '',
         'Image Present': '',
         'Needs Upgrade': '',
@@ -258,6 +259,7 @@ def _report_rows(rows: List[Dict[str, str]]) -> List[Dict[str, str]]:
                 'Boot Statement': row.get('Boot Statement', ''),
                 'ICMP Ping Status': row.get('ICMP Ping Status', row.get('Ping Status', '')),
                 'Image Present': row.get('Image Present', ''),
+                'Stack Download Progress': row.get('Stack Download Progress', ''),
                 'Switch in Stack': row.get('Switch Count', row.get('Switch in Stack', '')),
                 'Needs Upgrade': row.get('Needs Upgrade', ''),
                 'Target Image': row.get('Target Image', ''),
@@ -473,6 +475,7 @@ def _observed_summary_frame(rows: List[Dict[str, str]]) -> pd.DataFrame:
                 'Switch in Stack': row.get('Switch Count', row.get('Switch in Stack', '')),
                 'Observed Platform': row.get('Observed Platform', ''),
                 'Boot Statement': row.get('Boot Statement', ''),
+                'Stack Download Progress': row.get('Stack Download Progress', ''),
             }
         )
     return pd.DataFrame(summary_rows)
@@ -627,6 +630,7 @@ def render_app() -> None:
     for row in rows:
         row['ICMP Ping Status'] = str(row.get('ICMP Ping Status') or row.get('Ping Status') or '').strip()
         row['Switch in Stack'] = str(row.get('Switch Count') or row.get('Switch in Stack') or '').strip()
+        row['Stack Download Progress'] = str(row.get('Stack Download Progress') or '').strip()
     total = len(rows)
     observed = sum(1 for row in rows if row.get('Observed Version'))
     needs_upgrade = sum(1 for row in rows if row.get('Needs Upgrade') == 'Yes')
