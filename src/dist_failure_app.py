@@ -14,7 +14,11 @@ import pandas as pd
 import requests
 import streamlit as st
 
-from src.manual_reloads import build_manual_reload_profile, manual_reload_profile, run_manual_reload_workflow
+try:
+    from src.manual_reloads import build_manual_reload_profile, manual_reload_profile, run_manual_reload_workflow
+except ModuleNotFoundError:
+    # Streamlit Cloud may execute this file as a script from src/, where "src" isn't importable as a package.
+    from manual_reloads import build_manual_reload_profile, manual_reload_profile, run_manual_reload_workflow
 
 
 SOURCE_WORKBOOK_PATH = Path(

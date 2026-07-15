@@ -12,13 +12,22 @@ import streamlit as st
 from dotenv import load_dotenv
 from zoneinfo import ZoneInfo
 
-from src.ssh_device_client import (
-    icmp_ping,
-    open_ssh_connection,
-    parse_show_switch_members,
-    parse_show_version_details,
-    run_timed_command,
-)
+try:
+    from src.ssh_device_client import (
+        icmp_ping,
+        open_ssh_connection,
+        parse_show_switch_members,
+        parse_show_version_details,
+        run_timed_command,
+    )
+except ModuleNotFoundError:
+    from ssh_device_client import (
+        icmp_ping,
+        open_ssh_connection,
+        parse_show_switch_members,
+        parse_show_version_details,
+        run_timed_command,
+    )
 
 
 load_dotenv(override=True)
