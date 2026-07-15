@@ -323,6 +323,8 @@ def ensure_seed_data() -> List[Dict[str, str]]:
     rows = load_rows()
     if rows:
         return rows
+    if not SOURCE_WORKBOOK_PATH.exists():
+        return []
     rows = extract_seed_rows(SOURCE_WORKBOOK_PATH)
     save_rows(rows)
     write_outputs(rows)
@@ -330,6 +332,8 @@ def ensure_seed_data() -> List[Dict[str, str]]:
 
 
 def _refresh_seed_from_workbook() -> List[Dict[str, str]]:
+    if not SOURCE_WORKBOOK_PATH.exists():
+        raise FileNotFoundError(f'Workbook not found: {SOURCE_WORKBOOK_PATH}')
     rows = extract_seed_rows(SOURCE_WORKBOOK_PATH)
     save_rows(rows)
     write_outputs(rows)
@@ -556,11 +560,14 @@ def render_app() -> None:
 
     c1, c2, c3 = st.columns(3)
     if c1.button('Refresh Seed from Workbook', use_container_width=True):
-        rows = _refresh_seed_from_workbook()
-        rows = _apply_target_recommendations(rows, golden_images, selected_profile, use_automatic_image_selection)
-        save_rows(rows)
-        write_outputs(rows)
-        st.success('Seed database refreshed from workbook rows 91-182.')
+        try:
+            rows = _refresh_seed_from_workbook()
+            rows = _apply_target_recommendations(rows, golden_images, selected_profile, use_automatic_image_selection)
+            save_rows(rows)
+            write_outputs(rows)
+            st.success('Seed database refreshed from workbook rows 91-182.')
+        except FileNotFoundError as exc:
+            st.error(str(exc))
     if c2.button('Analyze Version/Image Report', use_container_width=True):
         with st.spinner('Collecting show version and image state over SSH...'):
             rows = _run_analysis(
