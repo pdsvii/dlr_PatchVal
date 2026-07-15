@@ -146,6 +146,7 @@ def _empty_seed_row() -> Dict[str, str]:
         'Observed Version': '',
         'Observed Image': '',
         'System Image': '',
+        'ICMP Ping Status': '',
         'Image Present': '',
         'Needs Upgrade': '',
         'SSH Login Status': '',
@@ -258,6 +259,7 @@ def _report_rows(rows: List[Dict[str, str]]) -> List[Dict[str, str]]:
                 'Observed Version': row.get('Observed Version', ''),
                 'Observed Image': row.get('Observed Image', row.get('System Image', '')),
                 'System Image': row.get('System Image', ''),
+                'ICMP Ping Status': row.get('ICMP Ping Status', row.get('Ping Status', '')),
                 'Image Present': row.get('Image Present', ''),
                 'Needs Upgrade': row.get('Needs Upgrade', ''),
                 'SSH Login Status': row.get('SSH Login Status', ''),
@@ -476,6 +478,7 @@ def _observed_summary_frame(rows: List[Dict[str, str]]) -> pd.DataFrame:
             {
                 'Device Name': row.get('Device Name', ''),
                 'Device IP': row.get('Device IP', ''),
+                'ICMP Ping Status': row.get('ICMP Ping Status', row.get('Ping Status', '')),
                 'Observed Platform': row.get('Observed Platform', ''),
                 'Observed Image': row.get('Observed Image', row.get('System Image', '')),
             }
@@ -631,6 +634,7 @@ def render_app() -> None:
     rows = _apply_target_recommendations(rows, golden_images, selected_profile, use_automatic_image_selection)
     for row in rows:
         row['Observed Image'] = str(row.get('Observed Image') or row.get('System Image') or '').strip()
+        row['ICMP Ping Status'] = str(row.get('ICMP Ping Status') or row.get('Ping Status') or '').strip()
     total = len(rows)
     observed = sum(1 for row in rows if row.get('Observed Version'))
     needs_upgrade = sum(1 for row in rows if row.get('Needs Upgrade') == 'Yes')

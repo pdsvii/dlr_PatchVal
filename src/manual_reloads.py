@@ -308,6 +308,7 @@ def _run_single_row(
 
     if not ip:
         result['Ping Status'] = 'Missing IP'
+        result['ICMP Ping Status'] = 'Missing IP'
         result['SSH Login Status'] = 'Skipped'
         result['Workflow Status'] = 'Skipped'
         result['Workflow Notes'] = 'No device IP provided'
@@ -315,6 +316,7 @@ def _run_single_row(
 
     is_online, ping_output = icmp_ping(ip)
     result['Ping Status'] = 'Online' if is_online else 'Offline'
+    result['ICMP Ping Status'] = result['Ping Status']
     result['Ping Output'] = ping_output
     if not is_online:
         result['SSH Login Status'] = 'Skipped'
