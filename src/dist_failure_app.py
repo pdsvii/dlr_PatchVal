@@ -144,6 +144,7 @@ def _empty_seed_row() -> Dict[str, str]:
         'Patching Status 2': '',
         'Observed Platform': '',
         'Observed Version': '',
+        'Observed Image': '',
         'System Image': '',
         'Image Present': '',
         'Needs Upgrade': '',
@@ -253,6 +254,7 @@ def _report_rows(rows: List[Dict[str, str]]) -> List[Dict[str, str]]:
                 'Platform': row.get('Platform', ''),
                 'Observed Platform': row.get('Observed Platform', ''),
                 'Observed Version': row.get('Observed Version', ''),
+                'Observed Image': row.get('Observed Image', row.get('System Image', '')),
                 'System Image': row.get('System Image', ''),
                 'Image Present': row.get('Image Present', ''),
                 'Needs Upgrade': row.get('Needs Upgrade', ''),
@@ -452,9 +454,29 @@ def _run_analysis(
                 profile=profile,
             )
         )
+
+    # Keep a dedicated observed image field alongside the existing system image field.
+    for row in results:
+        observed_image = str(row.get('Observed Image') or row.get('System Image') or '').strip()
+        row['Observed Image'] = observed_image
+
     save_rows(results)
     write_outputs(results)
     return results
+
+
+def _observed_summary_frame(rows: List[Dict[str, str]]) -> pd.DataFrame:
+    summary_rows: List[Dict[str, str]] = []
+    for row in rows:
+        summary_rows.append(
+            {
+                'Device Name': row.get('Device Name', ''),
+                'Device IP': row.get('Device IP', ''),
+                'Observed Platform': row.get('Observed Platform', ''),
+                'Observed Image': row.get('Observed Image', row.get('System Image', '')),
+            }
+        )
+    return pd.DataFrame(summary_rows)
 
 
 def _display_frame(rows: List[Dict[str, str]]) -> pd.DataFrame:
@@ -603,6 +625,8 @@ def render_app() -> None:
 
     rows = load_rows()
     rows = _apply_target_recommendations(rows, golden_images, selected_profile, use_automatic_image_selection)
+    for row in rows:
+        row['Observed Image'] = str(row.get('Observed Image') or row.get('System Image') or '').strip()
     total = len(rows)
     observed = sum(1 for row in rows if row.get('Observed Version'))
     needs_upgrade = sum(1 for row in rows if row.get('Needs Upgrade') == 'Yes')
@@ -621,6 +645,9 @@ def render_app() -> None:
 
     frame = _display_frame(rows)
     st.dataframe(frame, width='stretch', hide_index=True)
+
+    st.subheader('Observed Platform and Image (All Devices)')
+    st.dataframe(_observed_summary_frame(rows), width='stretch', hide_index=True)
 
     st.download_button(
         'Download Seed CSV',
