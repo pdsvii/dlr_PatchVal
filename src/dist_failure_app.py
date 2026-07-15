@@ -529,19 +529,233 @@ def _readiness_ok(checks: List[Dict[str, str]]) -> bool:
     return not any(check['Status'] == 'Blocked' for check in checks)
 
 
+def _inject_desktop_shell() -> None:
+    st.markdown(
+        '''
+        <style>
+        :root {
+            --app-bg: #e7ebf3;
+            --panel-bg: rgba(255, 255, 255, 0.88);
+            --panel-border: rgba(30, 41, 59, 0.10);
+            --panel-shadow: 0 18px 55px rgba(15, 23, 42, 0.12);
+            --accent: #1f6feb;
+            --accent-2: #0f766e;
+            --text-strong: #111827;
+            --text-muted: #536076;
+        }
+
+        html, body, [data-testid="stAppViewContainer"] {
+            background:
+                radial-gradient(circle at top left, rgba(31, 111, 235, 0.18), transparent 34%),
+                radial-gradient(circle at top right, rgba(15, 118, 110, 0.14), transparent 28%),
+                linear-gradient(180deg, #eef2f8 0%, #e3e8f2 100%);
+            font-family: "Segoe UI", "Aptos", "Helvetica Neue", Arial, sans-serif;
+            color: var(--text-strong);
+        }
+
+        #MainMenu, header, footer {
+            visibility: hidden;
+            height: 0;
+        }
+
+        .block-container {
+            padding-top: 1.2rem;
+            padding-bottom: 1.2rem;
+            max-width: 100% !important;
+        }
+
+        .desktop-window {
+            border: 1px solid var(--panel-border);
+            border-radius: 22px;
+            background: linear-gradient(180deg, rgba(255,255,255,0.94), rgba(244,247,252,0.92));
+            box-shadow: var(--panel-shadow);
+            padding: 0;
+            overflow: hidden;
+        }
+
+        .desktop-titlebar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            padding: 1rem 1.25rem;
+            background: linear-gradient(90deg, #132238, #1c3354 55%, #21456f);
+            color: white;
+            border-bottom: 1px solid rgba(255,255,255,0.12);
+        }
+
+        .desktop-title {
+            font-size: 1.2rem;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+            margin: 0;
+        }
+
+        .desktop-subtitle {
+            margin: 0.15rem 0 0;
+            font-size: 0.88rem;
+            color: rgba(255,255,255,0.78);
+        }
+
+        .desktop-shell {
+            display: grid;
+            grid-template-columns: minmax(270px, 320px) 1fr;
+            gap: 1rem;
+            padding: 1rem;
+        }
+
+        .desktop-rail, .desktop-canvas {
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: 18px;
+            box-shadow: 0 8px 30px rgba(15, 23, 42, 0.06);
+            backdrop-filter: blur(12px);
+        }
+
+        .desktop-rail {
+            padding: 1rem;
+            position: sticky;
+            top: 0.75rem;
+            align-self: start;
+        }
+
+        .desktop-canvas {
+            padding: 1rem 1rem 0.25rem;
+            min-width: 0;
+        }
+
+        .section-label {
+            margin: 0 0 0.45rem;
+            font-size: 0.77rem;
+            text-transform: uppercase;
+            letter-spacing: 0.14em;
+            color: var(--text-muted);
+        }
+
+        .control-card {
+            border: 1px solid rgba(15, 23, 42, 0.08);
+            border-radius: 14px;
+            background: rgba(255,255,255,0.88);
+            padding: 0.8rem;
+            margin-bottom: 0.85rem;
+        }
+
+        .compact-note {
+            font-size: 0.88rem;
+            color: var(--text-muted);
+            line-height: 1.45;
+        }
+
+        .desktop-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.35rem 0.65rem;
+            border-radius: 999px;
+            background: rgba(31, 111, 235, 0.12);
+            color: #0f3c7e;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        [data-testid="stMetric"] {
+            background: rgba(255,255,255,0.9);
+            border: 1px solid rgba(15, 23, 42, 0.08);
+            border-radius: 16px;
+            padding: 0.8rem 0.95rem;
+            box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04);
+        }
+
+        [data-testid="stDataFrame"] {
+            border: 1px solid rgba(15, 23, 42, 0.08);
+            border-radius: 16px;
+            overflow: hidden;
+            background: white;
+        }
+
+        [data-testid="stButton"] > button,
+        [data-testid="stDownloadButton"] > button {
+            border-radius: 12px !important;
+            border: 1px solid rgba(15, 23, 42, 0.12) !important;
+            background: linear-gradient(180deg, #ffffff, #eef3fb) !important;
+            color: #132238 !important;
+            box-shadow: 0 6px 16px rgba(15, 23, 42, 0.05);
+        }
+
+        [data-testid="stButton"] > button[kind="primary"] {
+            background: linear-gradient(180deg, #2b7cff, #0f5bd7) !important;
+            color: white !important;
+            border-color: #0f5bd7 !important;
+        }
+
+        [data-testid="stExpander"] {
+            border: 1px solid rgba(15, 23, 42, 0.08);
+            border-radius: 16px;
+            background: rgba(255,255,255,0.82);
+            box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04);
+        }
+
+        [data-testid="stSidebar"] {
+            background: linear-gradient(180deg, #112033 0%, #16263d 100%);
+            color: white;
+        }
+
+        [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p,
+        [data-testid="stSidebar"] label,
+        [data-testid="stSidebar"] .st-bq,
+        [data-testid="stSidebar"] .st-emotion-cache-16idsys p {
+            color: rgba(255,255,255,0.92) !important;
+        }
+
+        [data-testid="stSidebar"] [data-testid="stButton"] > button,
+        [data-testid="stSidebar"] [data-testid="stDownloadButton"] > button {
+            background: rgba(255,255,255,0.08) !important;
+            color: white !important;
+            border-color: rgba(255,255,255,0.18) !important;
+        }
+
+        </style>
+        ''',
+        unsafe_allow_html=True,
+    )
+
+
 def render_app() -> None:
     st.set_page_config(page_title='Distribution Failure Remediation', layout='wide')
-    st.title('Distribution Failure Remediation')
+    _inject_desktop_shell()
 
     default_profile = manual_reload_profile()
-    st.caption(f'Source workbook: {SOURCE_WORKBOOK_PATH}')
-    st.caption(f'Initial database: {DATABASE_PATH.resolve()}')
-    st.caption(f'Per-device post-check exports: {POSTCHECK_EXPORT_DIR}')
-    st.caption(
-        'Workflow actions reuse the existing SSH remediation logic for this non-reload phase: fetch current version/image, download image if needed, validate the boot statement, and optionally clean old images.'
+
+    st.markdown(
+        f'''
+        <div class="desktop-window">
+          <div class="desktop-titlebar">
+            <div>
+              <div class="desktop-title">Distribution Failure Remediation</div>
+              <div class="desktop-subtitle">Desktop-style staging console for image checks, stack fanout, and boot validation</div>
+            </div>
+            <div class="desktop-pill">No reloads in this phase</div>
+          </div>
+        </div>
+        ''',
+        unsafe_allow_html=True,
     )
 
     rows = ensure_seed_data()
+
+    with st.sidebar:
+        st.markdown('<div class="section-label">Control Center</div>', unsafe_allow_html=True)
+        st.markdown(
+            f'''<div class="control-card"><div class="compact-note">Source workbook<br><strong>{SOURCE_WORKBOOK_PATH}</strong></div></div>''',
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            f'''<div class="control-card"><div class="compact-note">Database<br><strong>{DATABASE_PATH.resolve()}</strong></div></div>''',
+            unsafe_allow_html=True,
+        )
+        st.markdown('<div class="section-label">Image Profile</div>', unsafe_allow_html=True)
+        
+    
 
     try:
         golden_images = _load_golden_images(GOLDEN_IMAGE_INDEX_URL)
@@ -554,76 +768,84 @@ def render_app() -> None:
     if default_profile['image_name'] in golden_images:
         default_index = golden_images.index(default_profile['image_name'])
 
-    cfg1, cfg2, cfg3 = st.columns([2, 1, 2])
-    selected_image = cfg1.selectbox('Fallback golden image', options=golden_images, index=default_index)
-    target_version = cfg2.text_input('Fallback target version', value=default_profile['target_version'])
-    image_base_url = cfg3.text_input('Golden image base URL', value=GOLDEN_IMAGE_INDEX_URL)
-    use_automatic_image_selection = st.checkbox('Auto-select image per platform', value=True)
+    with st.sidebar:
+        selected_image = st.selectbox('Fallback golden image', options=golden_images, index=default_index)
+        target_version = st.text_input('Fallback target version', value=default_profile['target_version'])
+        image_base_url = st.text_input('Golden image base URL', value=GOLDEN_IMAGE_INDEX_URL)
+        use_automatic_image_selection = st.checkbox('Auto-select image per platform', value=True)
     selected_profile = build_manual_reload_profile(
         image_name=selected_image,
         image_base_url=image_base_url,
         target_version=target_version,
     )
-    st.caption(
-        f'Fallback image: {selected_profile["image_name"]} | Fallback version: {selected_profile["target_version"]} | Image URL: {selected_profile["image_url"]}'
-    )
-    st.caption('Automatic rules cover 2960X, IE3300, C9200/C9300L, C9500/C9410R, ISR4331/4451, and C8300. Unmatched rows use the fallback image above.')
-    if listing_error:
-        st.warning(f'Golden image listing could not be loaded dynamically: {listing_error}')
+
+    with st.sidebar:
+        st.markdown(
+            f'''<div class="control-card"><div class="compact-note">Fallback image<br><strong>{selected_profile["image_name"]}</strong><br>Version {selected_profile["target_version"]}<br>{selected_profile["image_url"]}</div></div>''',
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            '<div class="control-card"><div class="compact-note">Automatic rules cover 2960X, IE3300, C9200/C9300L, C9500/C9410R, ISR4331/4451, and C8300.</div></div>',
+            unsafe_allow_html=True,
+        )
+        if listing_error:
+            st.warning(f'Golden image listing could not be loaded dynamically: {listing_error}')
 
     rows = _apply_target_recommendations(rows, golden_images, selected_profile, use_automatic_image_selection)
 
     readiness_checks = _readiness_checks(SOURCE_WORKBOOK_PATH.exists(), listing_error, rows, image_base_url)
     readiness_ok = _readiness_ok(readiness_checks)
-    with st.expander('Execution Readiness', expanded=True):
-        st.dataframe(pd.DataFrame(readiness_checks), width='stretch', hide_index=True)
-        if readiness_ok:
-            st.caption('Environment checks passed for staging operations.')
-        else:
-            st.warning('Resolve blocked readiness checks before running staging actions.')
+    with st.sidebar:
+        st.markdown('<div class="section-label">Execution</div>', unsafe_allow_html=True)
+        with st.expander('Execution Readiness', expanded=True):
+            st.dataframe(pd.DataFrame(readiness_checks), width='stretch', hide_index=True)
+            if readiness_ok:
+                st.caption('Environment checks passed for staging operations.')
+            else:
+                st.warning('Resolve blocked readiness checks before running staging actions.')
 
-    c1, c2, c3 = st.columns(3)
-    if c1.button('Refresh Seed from Workbook', use_container_width=True):
-        try:
-            rows = _refresh_seed_from_workbook()
-            rows = _apply_target_recommendations(rows, golden_images, selected_profile, use_automatic_image_selection)
-            save_rows(rows)
-            write_outputs(rows)
-            st.success('Seed database refreshed from workbook rows 91-182.')
-        except FileNotFoundError as exc:
-            st.error(str(exc))
-    if c2.button('Analyze Version/Image Report', use_container_width=True):
-        with st.spinner('Collecting show version and image state over SSH...'):
-            rows = _run_analysis(
-                execute_actions=False,
-                cleanup_old_images=False,
-                image_name=selected_image,
-                target_version=target_version,
-                image_base_url=image_base_url,
-                golden_images=golden_images,
-                use_automatic_image_selection=use_automatic_image_selection,
-            )
-        st.success('Version/image analysis complete.')
+        if st.button('Refresh Seed from Workbook', use_container_width=True):
+            try:
+                rows = _refresh_seed_from_workbook()
+                rows = _apply_target_recommendations(rows, golden_images, selected_profile, use_automatic_image_selection)
+                save_rows(rows)
+                write_outputs(rows)
+                st.success('Seed database refreshed from workbook rows 91-182.')
+            except FileNotFoundError as exc:
+                st.error(str(exc))
 
-    execute_actions = st.checkbox('Execute image download, boot statement update, validation, and write memory', value=False)
-    cleanup_old_images = st.checkbox('Clean up old images during execution', value=False)
-    confirmation_checked = st.checkbox('I confirm this phase will modify boot settings and write memory, but will not reload devices', value=False)
-    confirmation_text = st.text_input('Type STAGE to enable staging writes', value='')
-    can_stage = readiness_ok and execute_actions and confirmation_checked and confirmation_text.strip().upper() == 'STAGE'
-    if c3.button('Run Staging Workflow', use_container_width=True, type='primary', disabled=not can_stage):
-        with st.spinner('Running remediation workflow against the current database...'):
-            rows = _run_analysis(
-                execute_actions=execute_actions,
-                cleanup_old_images=cleanup_old_images,
-                image_name=selected_image,
-                target_version=target_version,
-                image_base_url=image_base_url,
-                golden_images=golden_images,
-                use_automatic_image_selection=use_automatic_image_selection,
-            )
-        st.success('Staging workflow finished. No reloads were sent. Review the report below.')
-    elif execute_actions and not can_stage:
-        st.info('Staging writes remain disabled until readiness checks pass and the confirmation step is completed.')
+        if st.button('Analyze Version/Image Report', use_container_width=True):
+            with st.spinner('Collecting show version and image state over SSH...'):
+                rows = _run_analysis(
+                    execute_actions=False,
+                    cleanup_old_images=False,
+                    image_name=selected_image,
+                    target_version=target_version,
+                    image_base_url=image_base_url,
+                    golden_images=golden_images,
+                    use_automatic_image_selection=use_automatic_image_selection,
+                )
+            st.success('Version/image analysis complete.')
+
+        execute_actions = st.checkbox('Execute image download, boot statement update, validation, and write memory', value=False)
+        cleanup_old_images = st.checkbox('Clean up old images during execution', value=False)
+        confirmation_checked = st.checkbox('I confirm this phase will modify boot settings and write memory, but will not reload devices', value=False)
+        confirmation_text = st.text_input('Type STAGE to enable staging writes', value='')
+        can_stage = readiness_ok and execute_actions and confirmation_checked and confirmation_text.strip().upper() == 'STAGE'
+        if st.button('Run Staging Workflow', use_container_width=True, type='primary', disabled=not can_stage):
+            with st.spinner('Running remediation workflow against the current database...'):
+                rows = _run_analysis(
+                    execute_actions=execute_actions,
+                    cleanup_old_images=cleanup_old_images,
+                    image_name=selected_image,
+                    target_version=target_version,
+                    image_base_url=image_base_url,
+                    golden_images=golden_images,
+                    use_automatic_image_selection=use_automatic_image_selection,
+                )
+            st.success('Staging workflow finished. No reloads were sent. Review the report below.')
+        elif execute_actions and not can_stage:
+            st.info('Staging writes remain disabled until readiness checks pass and the confirmation step is completed.')
 
     rows = load_rows()
     rows = _apply_target_recommendations(rows, golden_images, selected_profile, use_automatic_image_selection)
@@ -638,42 +860,48 @@ def render_app() -> None:
     boot_validated = sum(1 for row in rows if row.get('Boot Validation Status') == 'Matched running-config')
     auto_matched = sum(1 for row in rows if str(row.get('Profile Selection') or '').startswith('Auto:'))
     postchecked = sum(1 for row in rows if row.get('Post Check Status') == 'Completed')
-    m1, m2, m3, m4, m5, m6, m7 = st.columns(7)
-    m1.metric('Seed Rows', total)
-    m2.metric('Versions Collected', observed)
-    m3.metric('Need Upgrade', needs_upgrade)
-    m4.metric('Cleanup Completed', cleanup_done)
-    m5.metric('Auto Matched', auto_matched)
-    m6.metric('Boot Validated', boot_validated)
-    m7.metric('Post Checks', postchecked)
+    canvas = st.container()
+    with canvas:
+        st.markdown('<div class="desktop-window"><div class="desktop-canvas">', unsafe_allow_html=True)
+        m1, m2, m3, m4, m5, m6, m7 = st.columns(7)
+        m1.metric('Seed Rows', total)
+        m2.metric('Versions Collected', observed)
+        m3.metric('Need Upgrade', needs_upgrade)
+        m4.metric('Cleanup Completed', cleanup_done)
+        m5.metric('Auto Matched', auto_matched)
+        m6.metric('Boot Validated', boot_validated)
+        m7.metric('Post Checks', postchecked)
 
-    frame = _display_frame(rows)
-    st.dataframe(frame, width='stretch', hide_index=True)
-
-    st.subheader('Observed Platform and Boot Statement (All Devices)')
-    st.dataframe(_observed_summary_frame(rows), width='stretch', hide_index=True)
-
-    st.download_button(
-        'Download Seed CSV',
-        data=SEED_CSV_PATH.read_bytes() if SEED_CSV_PATH.exists() else b'',
-        file_name=SEED_CSV_PATH.name,
-        mime='text/csv',
-        use_container_width=True,
-    )
-    st.download_button(
-        'Download Report CSV',
-        data=REPORT_CSV_PATH.read_bytes() if REPORT_CSV_PATH.exists() else b'',
-        file_name=REPORT_CSV_PATH.name,
-        mime='text/csv',
-        use_container_width=True,
-    )
-    st.download_button(
-        'Download Report JSON',
-        data=REPORT_JSON_PATH.read_bytes() if REPORT_JSON_PATH.exists() else b'',
-        file_name=REPORT_JSON_PATH.name,
-        mime='application/json',
-        use_container_width=True,
-    )
+        tab1, tab2, tab3 = st.tabs(['Workspace', 'Observed State', 'Exports'])
+        with tab1:
+            st.dataframe(_display_frame(rows), width='stretch', hide_index=True)
+        with tab2:
+            st.subheader('Observed Platform and Boot Statement (All Devices)')
+            st.dataframe(_observed_summary_frame(rows), width='stretch', hide_index=True)
+        with tab3:
+            col_a, col_b, col_c = st.columns(3)
+            col_a.download_button(
+                'Download Seed CSV',
+                data=SEED_CSV_PATH.read_bytes() if SEED_CSV_PATH.exists() else b'',
+                file_name=SEED_CSV_PATH.name,
+                mime='text/csv',
+                use_container_width=True,
+            )
+            col_b.download_button(
+                'Download Report CSV',
+                data=REPORT_CSV_PATH.read_bytes() if REPORT_CSV_PATH.exists() else b'',
+                file_name=REPORT_CSV_PATH.name,
+                mime='text/csv',
+                use_container_width=True,
+            )
+            col_c.download_button(
+                'Download Report JSON',
+                data=REPORT_JSON_PATH.read_bytes() if REPORT_JSON_PATH.exists() else b'',
+                file_name=REPORT_JSON_PATH.name,
+                mime='application/json',
+                use_container_width=True,
+            )
+        st.markdown('</div></div>', unsafe_allow_html=True)
 
 
 if __name__ == '__main__':
