@@ -144,13 +144,10 @@ def _empty_seed_row() -> Dict[str, str]:
         'Patching Status 2': '',
         'Observed Platform': '',
         'Observed Version': '',
-        'Observed Image': '',
-        'System Image': '',
+        'Boot Statement': '',
         'ICMP Ping Status': '',
         'Image Present': '',
         'Needs Upgrade': '',
-        'SSH Login Status': '',
-        'SSH Error Category': '',
         'Boot Target': '',
         'Boot Command': '',
         'Workflow Status': 'Seeded',
@@ -257,13 +254,10 @@ def _report_rows(rows: List[Dict[str, str]]) -> List[Dict[str, str]]:
                 'Platform': row.get('Platform', ''),
                 'Observed Platform': row.get('Observed Platform', ''),
                 'Observed Version': row.get('Observed Version', ''),
-                'Observed Image': row.get('Observed Image', row.get('System Image', '')),
-                'System Image': row.get('System Image', ''),
+                'Boot Statement': row.get('Boot Statement', ''),
                 'ICMP Ping Status': row.get('ICMP Ping Status', row.get('Ping Status', '')),
                 'Image Present': row.get('Image Present', ''),
                 'Needs Upgrade': row.get('Needs Upgrade', ''),
-                'SSH Login Status': row.get('SSH Login Status', ''),
-                'SSH Error Category': row.get('SSH Error Category', ''),
                 'Target Image': row.get('Target Image', ''),
                 'Target Version': row.get('Target Version', ''),
                 'Profile Selection': row.get('Profile Selection', ''),
@@ -461,11 +455,6 @@ def _run_analysis(
             )
         )
 
-    # Keep a dedicated observed image field alongside the existing system image field.
-    for row in results:
-        observed_image = str(row.get('Observed Image') or row.get('System Image') or '').strip()
-        row['Observed Image'] = observed_image
-
     save_rows(results)
     write_outputs(results)
     return results
@@ -480,7 +469,7 @@ def _observed_summary_frame(rows: List[Dict[str, str]]) -> pd.DataFrame:
                 'Device IP': row.get('Device IP', ''),
                 'ICMP Ping Status': row.get('ICMP Ping Status', row.get('Ping Status', '')),
                 'Observed Platform': row.get('Observed Platform', ''),
-                'Observed Image': row.get('Observed Image', row.get('System Image', '')),
+                'Boot Statement': row.get('Boot Statement', ''),
             }
         )
     return pd.DataFrame(summary_rows)
@@ -633,7 +622,6 @@ def render_app() -> None:
     rows = load_rows()
     rows = _apply_target_recommendations(rows, golden_images, selected_profile, use_automatic_image_selection)
     for row in rows:
-        row['Observed Image'] = str(row.get('Observed Image') or row.get('System Image') or '').strip()
         row['ICMP Ping Status'] = str(row.get('ICMP Ping Status') or row.get('Ping Status') or '').strip()
     total = len(rows)
     observed = sum(1 for row in rows if row.get('Observed Version'))
@@ -654,7 +642,7 @@ def render_app() -> None:
     frame = _display_frame(rows)
     st.dataframe(frame, width='stretch', hide_index=True)
 
-    st.subheader('Observed Platform and Image (All Devices)')
+    st.subheader('Observed Platform and Boot Statement (All Devices)')
     st.dataframe(_observed_summary_frame(rows), width='stretch', hide_index=True)
 
     st.download_button(

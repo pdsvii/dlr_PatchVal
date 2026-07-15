@@ -240,6 +240,21 @@ def _validate_boot_statement(conn, boot_command: str, logs: List[str]) -> str:
         return f'Validation failed: {exc}'
 
 
+def _extract_boot_statement(show_boot_output: str) -> str:
+    for line in show_boot_output.splitlines():
+        text = line.strip()
+        if not text:
+            continue
+        lowered = text.lower()
+        if 'boot path-list' in lowered or lowered.startswith('boot variable') or lowered.startswith('boot:'):
+            return text
+    for line in show_boot_output.splitlines():
+        text = line.strip()
+        if text:
+            return text
+    return ''
+
+
 def _postcheck_commands(platform_text: str, flash_targets: List[str]) -> List[str]:
     platform = (platform_text or '').upper()
     commands = ['show running-config | include ^boot system']
@@ -340,34 +355,45 @@ def _run_single_row(
 
         show_version_output = conn.send_command('show version', read_timeout=60)
         details = parse_show_version_details(show_version_output)
+        try:
+            show_boot_output = conn.send_command('show boot', read_timeout=60)
+        except Exception:
+            show_boot_output = conn.send_command('show bootvar', read_timeout=60)
+
         result['Observed Platform'] = details['platform_id']
         result['Observed Version'] = details['software_version']
-        result['System Image'] = details['system_image']
+        result['Boot Statement'] = _extract_boot_statement(show_boot_output)
         result['Post Check Status'] = ''
         result['Post Check Commands'] = ''
         result['Post Check Output'] = ''
         result['Platform Match'] = 'Yes' if _platform_matches(imported_platform, details['platform_id'], profile['platform_prefix']) else 'No'
         result['Version Match'] = 'Yes' if _version_matches(details['software_version'], profile['target_version']) else 'No'
 
-        switch_output = conn.send_command('show switch', read_timeout=60)
-        member_ids = parse_show_switch_members(switch_output)
+        try:
+            switch_output = conn.send_command('show switch', read_timeout=60)
+            member_ids = parse_show_switch_members(switch_output)
+        except Exception as exc:
+            logs.append(f'show switch fallback to single flash: {exc}')
+            member_ids = [1]
+
         result['Switch Count'] = str(len(member_ids))
 
         flash_targets = _flash_targets(member_ids)
         boot_target = ''
-        image_present = False
+        target_dirs: Dict[str, str] = {}
         for flash_root in flash_targets:
             dir_output = conn.send_command(f'dir {flash_root}', read_timeout=60)
+            target_dirs[flash_root] = dir_output
             logs.append(f'{flash_root}: {"image found" if _has_image(dir_output, profile) else "image missing"}')
             if not boot_target and _has_image(dir_output, profile):
                 boot_target = _boot_target_from_dir_output(flash_root, dir_output, profile)
-                image_present = True
 
         if not boot_target:
             boot_target = _boot_target_from_dir_output(flash_targets[0], '', profile)
 
+        all_targets_have_image = all(_has_image(target_dirs.get(flash_root, ''), profile) for flash_root in flash_targets)
         result['Boot Target'] = boot_target
-        result['Image Present'] = 'Yes' if image_present else 'No'
+        result['Image Present'] = 'Yes' if all_targets_have_image else 'No'
 
         if not result['Platform Match'] == 'Yes':
             result['Needs Upgrade'] = 'No'
@@ -383,13 +409,35 @@ def _run_single_row(
             result['Workflow Notes'] = 'Target version already installed'
             return result
 
-        if execute_actions and not image_present:
-            for flash_root in flash_targets:
-                copy_output = run_timed_command(conn, f'copy {profile["image_url"]} {flash_root}', prompt_responses=['', ''])
-                logs.append(f'copy {flash_root}: {copy_output[-2500:]}')
-            boot_target = _boot_target_from_dir_output(flash_targets[0], f'{profile["image_name"]}\n{profile["image_folder"]}', profile)
-            result['Boot Target'] = boot_target
-            result['Image Present'] = 'Yes'
+        if execute_actions and not all_targets_have_image:
+            base_root = 'flash:/'
+            base_dir_output = conn.send_command(f'dir {base_root}', read_timeout=60)
+            base_has_image = _has_image(base_dir_output, profile)
+            if not base_has_image:
+                copy_output = run_timed_command(conn, f'copy {profile["image_url"]} flash:/', prompt_responses=['', ''])
+                logs.append(f'copy http->flash:/ {copy_output[-2500:]}')
+
+            missing_targets = [flash_root for flash_root in flash_targets if not _has_image(target_dirs.get(flash_root, ''), profile)]
+            for flash_root in missing_targets:
+                if flash_root == 'flash:/':
+                    continue
+                copy_output = run_timed_command(
+                    conn,
+                    f'copy flash:/{profile["image_name"]} {flash_root}',
+                    prompt_responses=['', ''],
+                )
+                logs.append(f'copy flash:/->{flash_root} {copy_output[-2500:]}')
+
+            # Re-check each target filesystem to set final image presence status.
+            target_dirs = {
+                flash_root: conn.send_command(f'dir {flash_root}', read_timeout=60)
+                for flash_root in flash_targets
+            }
+            all_targets_have_image = all(_has_image(target_dirs.get(flash_root, ''), profile) for flash_root in flash_targets)
+            result['Image Present'] = 'Yes' if all_targets_have_image else 'No'
+            if not boot_target:
+                boot_target = _boot_target_from_dir_output(flash_targets[0], target_dirs.get(flash_targets[0], ''), profile)
+                result['Boot Target'] = boot_target
 
         boot_command = f'boot system switch all {result["Boot Target"]}'
         result['Boot Command'] = boot_command
@@ -407,6 +455,11 @@ def _run_single_row(
             except Exception as exc:
                 logs.append(f'wr error: {exc}')
             result['Boot Validation Status'] = _validate_boot_statement(conn, boot_command, logs)
+            try:
+                verified_boot_output = conn.send_command('show boot', read_timeout=60)
+                result['Boot Statement'] = _extract_boot_statement(verified_boot_output) or result.get('Boot Statement', '')
+            except Exception:
+                pass
             result.update(_run_postchecks(conn, details['platform_id'] or imported_platform, flash_targets, logs))
             if execute_reload:
                 try:
@@ -480,11 +533,10 @@ def _display_rows(rows: List[Dict[str, str]]) -> List[Dict[str, str]]:
                 'Patching Status': row.get('Patching Status', ''),
                 'Patching Status 2': row.get('Patching Status 2', ''),
                 'Ping Status': row.get('Ping Status', ''),
-                'SSH Login Status': row.get('SSH Login Status', ''),
-                'SSH Error Category': row.get('SSH Error Category', ''),
                 'Switch Count': row.get('Switch Count', ''),
                 'Image Present': row.get('Image Present', ''),
                 'Needs Upgrade': row.get('Needs Upgrade', ''),
+                'Boot Statement': row.get('Boot Statement', ''),
                 'Boot Target': row.get('Boot Target', ''),
                 'Boot Command': row.get('Boot Command', ''),
                 'Boot Validation Status': row.get('Boot Validation Status', ''),
