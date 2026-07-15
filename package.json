@@ -1,0 +1,8 @@
+{
+  "name": "patch-validator",
+  "version": "0.0.0",
+  "scripts": {
+    "changelog:from-git": "python scripts/generate_changelog.py --from-git",
+    "changelog:release": "python scripts/generate_changelog.py --release"
+  }
+}

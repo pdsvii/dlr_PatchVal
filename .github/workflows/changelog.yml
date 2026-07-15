@@ -1,0 +1,44 @@
+name: Changelog
+
+on:
+  push:
+    tags:
+      - '*'
+  release:
+    types: [published]
+
+jobs:
+  update-changelog:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Run changelog generator (tag push)
+        if: "startsWith(github.ref, 'refs/tags/') && github.event_name == 'push'"
+        run: |
+          TAG=${GITHUB_REF#refs/tags/}
+          python scripts/generate_changelog.py --from-git
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+          git commit -m "docs(changelog): update Unreleased from git on tag $TAG" || echo "No changes to commit"
+          git push
+
+      - name: Run changelog generator (release published)
+        if: github.event_name == 'release'
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          python scripts/generate_changelog.py --release "$TAG"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+          git commit -m "chore(release): $TAG" || echo "No changes to commit"
+          git push

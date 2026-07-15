@@ -1,0 +1,11 @@
+requests
+python-dotenv
+streamlit
+netmiko
+reportlab
+xlwt
+xlrd
+pywin32; platform_system == "Windows"
+streamlit-autorefresh
+mcp>=1,<2
+openpyxl
