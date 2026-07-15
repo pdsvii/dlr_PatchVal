@@ -105,8 +105,12 @@ def parse_show_version_details(show_version_output: str) -> Dict[str, str]:
 def parse_show_switch_members(show_switch_output: str) -> List[int]:
     members: List[int] = []
     for line in show_switch_output.splitlines():
+        # Common formats:
+        #  *1       Master ... Ready
+        #   2       Member ... Ready
+        # and some variants where state appears immediately after switch id.
         match = re.match(
-            r'^\s*\*?(\d+)\s+(?:Active|Standby|Ready|Provisioned|Removed|Disabled|Init|Down|Unknown)\b',
+            r'^\s*\*?(\d+)\s+(?:Master|Member|Active|Standby|Ready|Provisioned|Removed|Disabled|Init|Down|Unknown)\b',
             line,
             flags=re.IGNORECASE,
         )
